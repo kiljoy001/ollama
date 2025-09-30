@@ -48,6 +48,7 @@
 #include "ggml-cuda/wkv.cuh"
 #include "ggml-cuda/gla.cuh"
 #include "ggml-cuda/set-rows.cuh"
+#include "ggml-cuda/checkpoint.cuh"
 #include "ggml.h"
 
 #include <algorithm>
@@ -2988,6 +2989,24 @@ static void evaluate_and_capture_cuda_graph(ggml_backend_cuda_context * cuda_ctx
                     GGML_LOG_ERROR("%s: op not supported %s (%s)\n", __func__, node->name, ggml_op_name(node->op));
                 }
                 GGML_ASSERT(ok);
+
+                // Checkpoint important operations (attention, MLP outputs)
+                if (ok && (node->op == GGML_OP_MUL_MAT ||
+                          node->op == GGML_OP_MUL_MAT_ID ||
+                          node->op == GGML_OP_FLASH_ATTN_EXT ||
+                          node->op == GGML_OP_FLASH_ATTN)) {
+                    // Get layer index from node number (approximate)
+                    int layer_idx = i / 20; // Rough estimate: ~20 ops per layer
+
+                    if (ggml_cuda_should_checkpoint(layer_idx)) {
+                        // Calculate tensor size
+                        size_t tensor_size = ggml_nbytes(node);
+                        void* tensor_data = node->data;
+
+                        // Save checkpoint
+                        ggml_cuda_save_checkpoint(layer_idx, tensor_data, tensor_size);
+                    }
+                }
             }
         }
 
