@@ -86,7 +86,27 @@ func predictServerFit(allGpus discover.GpuInfoList, f *ggml.GGML, adapters, proj
 	var estimatedVRAM uint64
 	for _, gpus := range allGpus.ByLibrary() {
 		var layerCount int
-		estimate := estimateGPULayers(gpus, f, projectors, opts, numParallel)
+		var estimate MemoryEstimate
+
+		// Check if pebbling optimization is enabled
+		if opts.PebblingEnabled != nil && *opts.PebblingEnabled {
+			// Use pebbling-optimized estimation
+			strategy := ParsePebblingStrategy(opts.PebblingStrategy)
+			pebblingEstimate := EstimatePebblingGPULayers(gpus, f, projectors, opts, numParallel, strategy)
+
+			// Convert to standard MemoryEstimate format
+			estimate = pebblingEstimate.MemoryEstimate
+			estimate.VRAMSize = pebblingEstimate.PracticalMemory
+
+			slog.Info("Using pebbling optimization",
+				"strategy", strategy.String(),
+				"memory_saved", format.HumanBytes2(pebblingEstimate.TheoreticalMemory-pebblingEstimate.PracticalMemory),
+				"recompute_cost", pebblingEstimate.RecomputationCost)
+		} else {
+			// Use standard estimation
+			estimate = estimateGPULayers(gpus, f, projectors, opts, numParallel)
+		}
+
 		layerCount, estimatedVRAM = estimate.Layers, estimate.VRAMSize
 		if opts.NumGPU < 0 {
 			if layerCount > 0 && layerCount >= int(f.KV().BlockCount()+1) {
@@ -103,6 +123,23 @@ func predictServerFit(allGpus discover.GpuInfoList, f *ggml.GGML, adapters, proj
 		}
 	}
 	return false, estimatedVRAM
+}
+
+// ParsePebblingStrategy converts string to PebblingStrategy enum
+func ParsePebblingStrategy(strategy string) PebblingStrategy {
+	switch strings.ToLower(strategy) {
+	case "sqrt", "checkpoint":
+		return CheckpointSqrtN
+	case "adaptive", "williams":
+		return AdaptivePebbling
+	case "poor", "minimal":
+		return MemoryPoor
+	case "standard", "none", "":
+		return StandardBackprop
+	default:
+		slog.Warn("Unknown pebbling strategy, using standard", "strategy", strategy)
+		return StandardBackprop
+	}
 }
 
 type MemoryEstimate struct {
