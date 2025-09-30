@@ -86,7 +86,17 @@ func predictServerFit(allGpus discover.GpuInfoList, f *ggml.GGML, adapters, proj
 	var estimatedVRAM uint64
 	for _, gpus := range allGpus.ByLibrary() {
 		var layerCount int
-		estimate := estimateGPULayers(gpus, f, projectors, opts, numParallel)
+		var estimate MemoryEstimate
+
+		// Check if pebbling optimization is enabled
+		if opts.PebblingEnabled != nil && *opts.PebblingEnabled {
+			strategy := ParsePebblingStrategy(opts.PebblingStrategy)
+			pebblingEst := EstimateWithPebbling(gpus, f, projectors, opts, numParallel, strategy)
+			estimate = pebblingEst.MemoryEstimate
+		} else {
+			estimate = estimateGPULayers(gpus, f, projectors, opts, numParallel)
+		}
+
 		layerCount, estimatedVRAM = estimate.Layers, estimate.VRAMSize
 		if opts.NumGPU < 0 {
 			if layerCount > 0 && layerCount >= int(f.KV().BlockCount()+1) {

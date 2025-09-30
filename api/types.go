@@ -398,6 +398,10 @@ type Runner struct {
 	MainGPU   int   `json:"main_gpu,omitempty"`
 	UseMMap   *bool `json:"use_mmap,omitempty"`
 	NumThread int   `json:"num_thread,omitempty"`
+
+	// Memory optimization options
+	PebblingEnabled  *bool  `json:"pebbling_enabled,omitempty"`
+	PebblingStrategy string `json:"pebbling_strategy,omitempty"` // "standard", "sqrt", "adaptive", "poor"
 }
 
 // EmbedRequest is the request passed to [Client.Embed].
