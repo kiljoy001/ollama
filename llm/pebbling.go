@@ -58,11 +58,12 @@ type PebblingMemoryEstimate struct {
 	MemoryEstimate
 
 	// Pebbling-specific fields
-	Strategy          PebblingStrategy
-	CheckpointLayers  []int
-	TheoreticalMemory uint64  // Theoretical memory bound
-	PracticalMemory   uint64  // Actual memory after constraints
-	RecomputationCost float64 // Estimated extra computation
+	Strategy           PebblingStrategy
+	CheckpointLayers   []int
+	TheoreticalMemory  uint64            // Theoretical memory bound
+	PracticalMemory    uint64            // Actual memory after constraints
+	RecomputationCost  float64           // Estimated extra computation
+	CheckpointManager  *CheckpointManager // Active checkpoint manager
 }
 
 // EstimateWithPebbling calculates memory estimate with pebbling optimization
@@ -138,6 +139,15 @@ func EstimateWithPebbling(
 
 	// Update VRAM size to reflect pebbling savings
 	pebblingEstimate.VRAMSize = pebblingEstimate.PracticalMemory
+
+	// Create checkpoint manager if not using standard backprop
+	if strategy != StandardBackprop && gpus[0].Library != "cpu" {
+		pebblingEstimate.CheckpointManager = NewCheckpointManager(
+			layerCount,
+			strategy,
+			pebblingEstimate.PracticalMemory,
+		)
+	}
 
 	slog.Info("Pebbling memory estimate",
 		"strategy", strategy.String(),
