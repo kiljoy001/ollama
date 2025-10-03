@@ -1,3 +1,4 @@
+#if !defined(GGML_USE_HIP)
 #include "checkpoint.cuh"
 #include "common.cuh"
 #include <cuda_runtime.h>
@@ -166,3 +167,5 @@ extern "C" int ggml_cuda_checkpoint_count() {
 extern "C" void ggml_cuda_checkpoint_cleanup() {
     g_checkpoint_storage.clear();
 }
+
+#endif // !GGML_USE_HIP

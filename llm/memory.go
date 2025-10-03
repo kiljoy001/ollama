@@ -88,9 +88,23 @@ func predictServerFit(allGpus discover.GpuInfoList, f *ggml.GGML, adapters, proj
 		var layerCount int
 		var estimate MemoryEstimate
 
-		// Check if pebbling optimization is enabled
-		if opts.PebblingEnabled != nil && *opts.PebblingEnabled {
-			strategy := ParsePebblingStrategy(opts.PebblingStrategy)
+		// Auto-enable pebbling for GPUs with <24GB VRAM or if explicitly enabled
+		enablePebbling := opts.PebblingEnabled != nil && *opts.PebblingEnabled
+		if !enablePebbling && len(gpus) > 0 {
+			// Enable pebbling automatically for smaller GPUs (Intel Arc, etc)
+			totalVRAM := uint64(0)
+			for _, gpu := range gpus {
+				totalVRAM += gpu.TotalMemory
+			}
+			enablePebbling = totalVRAM < 24*1024*1024*1024 // < 24 GB
+		}
+
+		if enablePebbling {
+			strategy := CheckpointSqrtN // Default to sqrt(n) checkpointing
+			if opts.PebblingStrategy != "" {
+				strategy = ParsePebblingStrategy(opts.PebblingStrategy)
+			}
+			slog.Info("Pebbling memory optimization", "strategy", strategy.String(), "gpus", len(gpus))
 			pebblingEst := EstimateWithPebbling(gpus, f, projectors, opts, numParallel, strategy)
 			estimate = pebblingEst.MemoryEstimate
 		} else {

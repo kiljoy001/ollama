@@ -2993,8 +2993,7 @@ static void evaluate_and_capture_cuda_graph(ggml_backend_cuda_context * cuda_ctx
                 // Checkpoint important operations (attention, MLP outputs)
                 if (ok && (node->op == GGML_OP_MUL_MAT ||
                           node->op == GGML_OP_MUL_MAT_ID ||
-                          node->op == GGML_OP_FLASH_ATTN_EXT ||
-                          node->op == GGML_OP_FLASH_ATTN)) {
+                          node->op == GGML_OP_FLASH_ATTN_EXT)) {
                     // Get layer index from node number (approximate)
                     int layer_idx = i / 20; // Rough estimate: ~20 ops per layer
 

@@ -58,12 +58,13 @@ type PebblingMemoryEstimate struct {
 	MemoryEstimate
 
 	// Pebbling-specific fields
-	Strategy           PebblingStrategy
-	CheckpointLayers   []int
-	TheoreticalMemory  uint64            // Theoretical memory bound
-	PracticalMemory    uint64            // Actual memory after constraints
-	RecomputationCost  float64           // Estimated extra computation
-	CheckpointManager  *CheckpointManager // Active checkpoint manager
+	Strategy              PebblingStrategy
+	CheckpointLayers      []int
+	TheoreticalMemory     uint64                 // Theoretical memory bound
+	PracticalMemory       uint64                 // Actual memory after constraints
+	RecomputationCost     float64                // Estimated extra computation
+	CheckpointManager     *CheckpointManager     // CUDA checkpoint manager
+	CPUCheckpointManager  *CPUCheckpointManager  // CPU/Intel checkpoint manager
 }
 
 // EstimateWithPebbling calculates memory estimate with pebbling optimization
@@ -141,12 +142,21 @@ func EstimateWithPebbling(
 	pebblingEstimate.VRAMSize = pebblingEstimate.PracticalMemory
 
 	// Create checkpoint manager if not using standard backprop
-	if strategy != StandardBackprop && gpus[0].Library != "cpu" {
-		pebblingEstimate.CheckpointManager = NewCheckpointManager(
-			layerCount,
-			strategy,
-			pebblingEstimate.PracticalMemory,
-		)
+	if strategy != StandardBackprop {
+		if gpus[0].Library == "cuda" {
+			pebblingEstimate.CheckpointManager = NewCheckpointManager(
+				layerCount,
+				strategy,
+				pebblingEstimate.PracticalMemory,
+			)
+		} else {
+			// Use CPU checkpointing for Intel GPU and other non-CUDA backends
+			pebblingEstimate.CPUCheckpointManager = NewCPUCheckpointManager(
+				layerCount,
+				strategy,
+				pebblingEstimate.PracticalMemory,
+			)
+		}
 	}
 
 	slog.Info("Pebbling memory estimate",
